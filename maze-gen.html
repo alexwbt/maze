@@ -1,0 +1,416 @@
+<style>
+    * {
+        padding: 0;
+        margin: 0;
+    }
+</style>
+
+<canvas id="canvas"></canvas>
+
+<script>
+
+    const U = 0;
+    const D = 1;
+    const L = 2;
+    const R = 3;
+    const four = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+
+    const size = 500;
+    let maze = Array(size).fill(0).map((e, x) => Array(size).fill(0).map((e, y) => ({ x, y, beenTo: false, walls: [true, true, true, true], value: 0 })));
+
+    /*
+        Generation
+    */
+    const outOfBound = (x, y) => !(x >= 0 && x < size && y >= 0 && y < size);
+
+    const getOpDir = dir => {
+        switch (dir) {
+            case U: return D;
+            case D: return U;
+            case L: return R;
+            case R: return L;
+        }
+        return -1;
+    };
+
+    const random = max => Math.floor(Math.random() * max);
+
+    const generate = (x, y) => {
+        maze[x][y].beenTo = true;
+
+        let availableDir = [0, 1, 2, 3];
+        while (availableDir.length > 0) {
+            const dir = availableDir[random(availableDir.length)];
+            availableDir = availableDir.filter(e => e !== dir);
+            const nextX = x + four[dir][0];
+            const nextY = y + four[dir][1];
+            if (!outOfBound(nextX, nextY) && !maze[nextX][nextY].beenTo) {
+                maze[x][y].walls[dir] = false;
+                maze[nextX][nextY].walls[getOpDir(dir)] = false;
+                generate(nextX, nextY);
+            }
+        }
+    };
+    const generate2 = (x, y) => {
+        let distance = 0;
+        while (true) {
+            maze[x][y].value = ++distance;
+            maze[x][y].beenTo = true;
+            const availableDir = [];
+            for (let i = 0; i < four.length; i++) {
+                const nextX = x + four[i][0];
+                const nextY = y + four[i][1];
+                if (!outOfBound(nextX, nextY) && !maze[nextX][nextY].beenTo && maze[nextX][nextY].value === 0) {
+                    availableDir.push(i);
+                }
+            }
+            if (availableDir.length > 0) {
+                const dir = availableDir[random(availableDir.length)];
+                const nextX = x + four[dir][0];
+                const nextY = y + four[dir][1];
+                maze[x][y].walls[dir] = false;
+                maze[nextX][nextY].walls[getOpDir(dir)] = false;
+                x = nextX;
+                y = nextY;
+            } else {
+                for (let i = 0; i < four.length; i++) {
+                    const nextX = x + four[i][0];
+                    const nextY = y + four[i][1];
+                    if (!outOfBound(nextX, nextY) && !maze[x][y].walls[i] && maze[nextX][nextY].value !== 0 && maze[nextX][nextY].value < maze[x][y].value) {
+                        x = nextX;
+                        y = nextY;
+                        distance = maze[nextX][nextY].value - 1;
+                        break;
+                    }
+                    if (i >= four.length - 1) {
+                        return;
+                    }
+                }
+            }
+        }
+    };
+    const generate3 = (x, y) => {
+        let distance = 0;
+        const mem = [];
+        while (true) {
+            maze[x][y].value = ++distance;
+            maze[x][y].beenTo = true;
+            const availableDir = [];
+            for (let i = 0; i < four.length; i++) {
+                const nextX = x + four[i][0];
+                const nextY = y + four[i][1];
+                if (!outOfBound(nextX, nextY) && !maze[nextX][nextY].beenTo && maze[nextX][nextY].value === 0) {
+                    availableDir.push(i);
+                }
+            }
+            if (availableDir.length > 0) {
+                let dir;
+                if (availableDir.length == 1) dir = availableDir[0];
+                else {
+                    dir = availableDir[random(availableDir.length)];
+                    mem.push({ x, y, distance });
+                }
+                const nextX = x + four[dir][0];
+                const nextY = y + four[dir][1];
+                maze[x][y].walls[dir] = false;
+                maze[nextX][nextY].walls[getOpDir(dir)] = false;
+                x = nextX;
+                y = nextY;
+            } else {
+                if (mem.length === 0) return;
+                const last = mem.pop();
+                x = last.x;
+                y = last.y;
+                distance = last.distance;
+            }
+        }
+    };
+    generate3(random(size), random(size));
+
+    /*
+        Rendering
+    */
+    let gridSize = 10;
+    const ctx = canvas.getContext('2d');
+
+    let offsetX = 0, offsetY = 0;
+    let colorG;
+    render = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        ctx.fillStyle = "rgb(50, 50, 50)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = gridSize / 5;
+        const sx = Math.max(Math.floor(-offsetX / gridSize), 0);
+        const sy = Math.max(Math.floor(-offsetY / gridSize), 0);
+        const esx = Math.min(Math.ceil((canvas.width - offsetX) / gridSize), size);
+        const esy = Math.min(Math.ceil((canvas.width - offsetY) / gridSize), size);
+        for (let x = sx; x < esx; x++) {
+            for (let y = sy; y < esy; y++) {
+                const px = x * gridSize + offsetX;
+                const py = y * gridSize + offsetY;
+                const ex = (x + 1) * gridSize + offsetX;
+                const ey = (y + 1) * gridSize + offsetY;
+
+                if (maze[x][y].color) {
+                    const mx = (x + 0.5) * gridSize + offsetX;
+                    const my = (y + 0.5) * gridSize + offsetY;
+                    ctx.fillStyle = maze[x][y].color;
+                    ctx.beginPath();
+                    ctx.arc(mx, my, gridSize * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (maze[x][y].value > 0 && colorG) {
+                    ctx.fillStyle = colorG[maze[x][y].value];
+                    ctx.fillRect(px, py, gridSize, gridSize);
+                }
+                if (maze[x][y].walls[0]) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(ex, py);
+                    ctx.stroke();
+                }
+                if (maze[x][y].walls[1]) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, ey);
+                    ctx.lineTo(ex, ey);
+                    ctx.stroke();
+                }
+                if (maze[x][y].walls[2]) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(px, ey);
+                    ctx.stroke();
+                }
+                if (maze[x][y].walls[3]) {
+                    ctx.beginPath();
+                    ctx.moveTo(ex, py);
+                    ctx.lineTo(ex, ey);
+                    ctx.stroke();
+                }
+                // ctx.fillStyle = "grey";
+                // ctx.fillText(maze[x][y].value, (x + 0.5) * gridSize, (y + 0.5) * gridSize);
+            }
+        }
+        window.cancelAnimationFrame(requestID);
+        requestID = window.requestAnimationFrame(render);
+    };
+    let requestID = window.requestAnimationFrame(render);
+
+    window.addEventListener("mousewheel", e => {
+        gridSize += e.wheelDelta / size;
+    });
+
+    window.addEventListener("keydown", e => {
+        switch (e.key) {
+            case "w": offsetY += 10; break;
+            case "a": offsetX += 10; break;
+            case "s": offsetY -= 10; break;
+            case "d": offsetX -= 10; break;
+            default: return;
+        }
+    });
+
+    /*
+        Path finding
+    */
+    let startX, startY, endX, endY, hasStart, hasEnd;
+    window.addEventListener("contextmenu", e => e.preventDefault());
+    window.addEventListener("mousedown", e => {
+        if (e.x < offsetX || e.x > offsetX + size * gridSize || e.y < offsetY || e.y > offsetY + size * gridSize)
+            return;
+        (async () => {
+            const x = Math.floor((e.x - offsetX) / gridSize);
+            const y = Math.floor((e.y - offsetY) / gridSize);
+            if (e.button === 0) {
+                startX = x;
+                startY = y;
+                hasStart = true;
+                hasEnd = false;
+            } else {
+                endX = x;
+                endY = y;
+                hasEnd = true;
+            }
+            maze = maze.map(r => r.map(e => ({ ...e, beenTo: false, value: 0, color: getColor(e.x, e.y) })));
+            if (hasStart && hasEnd) {
+                // path(startX, startY, 0);
+                path3();
+            }
+        })();
+    });
+
+    const getColor = (x, y) => {
+        if (hasStart && x === startX && y === startY) return "rgb(0, 255, 0)";
+        if (hasEnd && x === endX && y === endY) return "red";
+        return false;
+    };
+
+    const path = (x, y, distance) => {
+        if (x === endX && y === endY) {
+            colorG = colors([0, 255, 0], [255, 0, 0], distance);
+            return true;
+        }
+        maze[x][y].beenTo = true;
+
+        for (let i = 0; i < four.length; i++) {
+            const nextX = x + four[i][0];
+            const nextY = y + four[i][1];
+            if (!outOfBound(nextX, nextY) && !maze[nextX][nextY].beenTo && !maze[x][y].walls[i] && path(nextX, nextY, distance + 1)) {
+                maze[x][y].value = distance;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const path2 = () => {
+        const valueDir = -1;
+        let value = valueDir;
+        maze[startX][startY].value = value;
+        while (true) {
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    if (maze[x][y].value === value) {
+                        if (x === endX && y === endY) {
+                            const v = Math.abs(value);
+                            if (v > 200) {
+                                const s = Math.abs(value) / 2 + 1;
+                                colorG = colors([0, 255, 0], [0, 0, 255], s).concat(colors([0, 0, 255], [255, 0, 0], s));
+                            } else if (v > 1000) {
+                                const s = Math.abs(value) / 4;
+                                colorG = colors([0, 255, 0], [0, 255, 255], s)
+                                    .concat(colors([0, 255, 255], [0, 0, 255], s))
+                                    .concat(colors([0, 0, 255], [255, 0, 255], s))
+                                    .concat(colors([255, 0, 255], [255, 0, 0], s));
+                            } else {
+                                colorG = colors([0, 255, 0], [255, 0, 0], v + 1);
+                            }
+                            // retrace
+                            while (true) {
+                                if (x === startX && y === startY) {
+                                    break;
+                                }
+                                for (let i = 0; i < four.length; i++) {
+                                    const nextX = x + four[i][0];
+                                    const nextY = y + four[i][1];
+                                    if (!outOfBound(nextX, nextY) && !maze[x][y].walls[i] && maze[nextX][nextY].value !== 0 && Math.abs(maze[nextX][nextY].value) < Math.abs(maze[x][y].value)) {
+                                        maze[x][y].value = Math.abs(maze[x][y].value);
+                                        x = nextX;
+                                        y = nextY;
+                                        break;
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                        for (let i = 0; i < four.length; i++) {
+                            const nextX = x + four[i][0];
+                            const nextY = y + four[i][1];
+                            if (!outOfBound(nextX, nextY) && !maze[x][y].walls[i] && maze[nextX][nextY].value === 0) {
+                                maze[nextX][nextY].value = value + valueDir;
+                            }
+                        }
+                    }
+                }
+            }
+            value += valueDir;
+        }
+    };
+
+    const path3 = () => {
+        const valueDir = -1;
+        let value = valueDir;
+        maze[startX][startY].value = value;
+        let heads = [[startX, startY]];
+        let newHeads = [];
+        while (true) {
+            for (let h = 0; h < heads.length; h++) {
+                let x = heads[h][0];
+                let y = heads[h][1];
+                if (x === endX && y === endY) {
+                    const v = Math.abs(value);
+                    if (v > 1000) {
+                        const s = Math.abs(value) / 4;
+                        colorG = colors([0, 255, 0], [0, 255, 255], s)
+                            .concat(colors([0, 255, 255], [0, 0, 255], s))
+                            .concat(colors([0, 0, 255], [255, 0, 255], s))
+                            .concat(colors([255, 0, 255], [255, 0, 0], s));
+                    } else if (v > 200) {
+                        const s = Math.abs(value) / 2 + 1;
+                        colorG = colors([0, 255, 0], [0, 0, 255], s).concat(colors([0, 0, 255], [255, 0, 0], s));
+                    } else {
+                        colorG = colors([0, 255, 0], [255, 0, 0], v + 1);
+                    }
+                    // retrace
+                    while (true) {
+                        if (x === startX && y === startY) {
+                            break;
+                        }
+                        for (let i = 0; i < four.length; i++) {
+                            const nextX = x + four[i][0];
+                            const nextY = y + four[i][1];
+                            if (!outOfBound(nextX, nextY) && !maze[x][y].walls[i] && maze[nextX][nextY].value !== 0 && Math.abs(maze[nextX][nextY].value) < Math.abs(maze[x][y].value)) {
+                                maze[x][y].value = Math.abs(maze[x][y].value);
+                                x = nextX;
+                                y = nextY;
+                                break;
+                            }
+                        }
+                    }
+                    return;
+                }
+                for (let i = 0; i < four.length; i++) {
+                    const nextX = x + four[i][0];
+                    const nextY = y + four[i][1];
+                    if (!outOfBound(nextX, nextY) && !maze[x][y].walls[i] && maze[nextX][nextY].value === 0) {
+                        maze[nextX][nextY].value = value + valueDir;
+                        newHeads.push([nextX, nextY]);
+                    }
+                }
+            }
+            heads = newHeads.slice();
+            newHeads = [];
+            value += valueDir;
+        }
+    };
+
+    /*
+        Color gradient
+    */
+    const colors = (color1, color2, stepsInt) => {
+        function pad(n, width, z) {
+            z = z || '0';
+            n = n + '';
+            return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
+        }
+
+        let colors = [];
+
+        let per = 100 / (stepsInt + 1);
+
+        let valClampRGB = [
+            color2[0] - color1[0],
+            color2[1] - color1[1],
+            color2[2] - color1[2]
+        ];
+
+        for (let i = 0; i < stepsInt; i++) {
+            let clampedR = (valClampRGB[0] > 0)
+                ? pad((Math.round(valClampRGB[0] / 100 * (per * (i + 1)))).toString(16), 2)
+                : pad((Math.round((color1[0] + (valClampRGB[0]) / 100 * (per * (i + 1))))).toString(16), 2);
+
+            let clampedG = (valClampRGB[1] > 0)
+                ? pad((Math.round(valClampRGB[1] / 100 * (per * (i + 1)))).toString(16), 2)
+                : pad((Math.round((color1[1] + (valClampRGB[1]) / 100 * (per * (i + 1))))).toString(16), 2);
+
+            let clampedB = (valClampRGB[2] > 0)
+                ? pad((Math.round(valClampRGB[2] / 100 * (per * (i + 1)))).toString(16), 2)
+                : pad((Math.round((color1[2] + (valClampRGB[2]) / 100 * (per * (i + 1))))).toString(16), 2);
+            colors[i] = `#${clampedR}${clampedG}${clampedB}`;
+        }
+        return colors;
+    };
+
+</script>
